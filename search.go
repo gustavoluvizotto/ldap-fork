@@ -609,6 +609,40 @@ func (l *Conn) Search(searchRequest *SearchRequest) (*SearchResult, error) {
 	}
 }
 
+// SearchRaw performs the given search request and return the raw result
+// The search does not take into account limits or paging, it will return all results.
+func (l *Conn) SearchRaw(searchRequest *SearchRequest) ([]ber.Packet, error) {
+	msgCtx, err := l.doRequest(searchRequest)
+	if err != nil {
+		return nil, err
+	}
+	defer l.finishMessage(msgCtx)
+
+	rawResult := make([]ber.Packet, 0)
+
+	for {
+		packet, err := l.readPacket(msgCtx)
+		if err != nil {
+			return rawResult, err
+		}
+
+		switch packet.Children[1].Tag {
+		case 4:
+			rawResult = append(rawResult, *packet)
+		case 5:
+			err := GetLDAPError(packet)
+			if err != nil {
+				return rawResult, err
+			}
+			rawResult = append(rawResult, *packet)
+			return rawResult, nil
+		case 19:
+			// Referral
+			rawResult = append(rawResult, *packet)
+		}
+	}
+}
+
 // SearchAsync performs a search request and returns all search results asynchronously.
 // This means you get all results until an error happens (or the search successfully finished),
 // e.g. for size / time limited requests all are recieved until the limit is reached.

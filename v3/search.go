@@ -51,6 +51,9 @@ var DerefMap = map[int]string{
 // and enforcing the requested limit is enabled in the search request (EnforceSizeLimit)
 var ErrSizeLimitExceeded = NewError(ErrorNetwork, errors.New("ldap: size limit exceeded"))
 
+// RawResult is a global variable that holds the raw result of a search request
+var RawResult = make([]ber.Packet, 0)
+
 // NewEntry returns an Entry object with the specified distinguished name and attribute key-value pairs.
 // The map of attributes is accessed in alphabetical order of the keys in order to ensure that, for the
 // same input map of attributes, the output entry will contain the same order of attributes
@@ -559,6 +562,8 @@ func (l *Conn) Search(searchRequest *SearchRequest) (*SearchResult, error) {
 	}
 	defer l.finishMessage(msgCtx)
 
+	RawResult = make([]ber.Packet, 0)
+
 	result := &SearchResult{
 		Entries:   make([]*Entry, 0),
 		Referrals: make([]string, 0),
@@ -568,6 +573,7 @@ func (l *Conn) Search(searchRequest *SearchRequest) (*SearchResult, error) {
 	for {
 		packet, err := l.readPacket(msgCtx)
 		if err != nil {
+			RawResult = append(RawResult, *packet)
 			return result, err
 		}
 
@@ -576,6 +582,7 @@ func (l *Conn) Search(searchRequest *SearchRequest) (*SearchResult, error) {
 			if searchRequest.EnforceSizeLimit &&
 				searchRequest.SizeLimit > 0 &&
 				len(result.Entries) >= searchRequest.SizeLimit {
+				RawResult = append(RawResult, *packet)
 				return result, ErrSizeLimitExceeded
 			}
 
@@ -588,9 +595,11 @@ func (l *Conn) Search(searchRequest *SearchRequest) (*SearchResult, error) {
 				Attributes: unpackAttributes(attr),
 			}
 			result.Entries = append(result.Entries, entry)
+			RawResult = append(RawResult, *packet)
 		case 5:
 			err := GetLDAPError(packet)
 			if err != nil {
+				RawResult = append(RawResult, *packet)
 				return result, err
 			}
 			if len(packet.Children) == 3 {
@@ -602,9 +611,11 @@ func (l *Conn) Search(searchRequest *SearchRequest) (*SearchResult, error) {
 					result.Controls = append(result.Controls, decodedChild)
 				}
 			}
+			RawResult = append(RawResult, *packet)
 			return result, nil
 		case 19:
 			result.Referrals = append(result.Referrals, packet.Children[1].Children[0].Value.(string))
+			RawResult = append(RawResult, *packet)
 		}
 	}
 }

@@ -573,7 +573,9 @@ func (l *Conn) Search(searchRequest *SearchRequest) (*SearchResult, error) {
 	for {
 		packet, err := l.readPacket(msgCtx)
 		if err != nil {
-			RawResult = append(RawResult, *packet)
+			if packet != nil {
+				RawResult = append(RawResult, *packet)
+			}
 			return result, err
 		}
 
@@ -599,7 +601,9 @@ func (l *Conn) Search(searchRequest *SearchRequest) (*SearchResult, error) {
 		case 5:
 			err := GetLDAPError(packet)
 			if err != nil {
-				RawResult = append(RawResult, *packet)
+				if packet != nil {
+					RawResult = append(RawResult, *packet)
+				}
 				return result, err
 			}
 			if len(packet.Children) == 3 {
